@@ -302,7 +302,8 @@ CDT_C_API int32_t cdt_calculate_triangle_depths(void* handle, uint16_t* depths)
 {
     return guard(handle, [&] {
         // CDT peels depths from the super-triangle, so reading them after it is erased would
-        // read past the triangles.
+        // read past the triangles. CDT does not check this itself yet: once it raises
+        // FinalizedError here too, and the submodule is moved past that, this check goes.
         if(H(handle)->cdt.isFinalized())
             throw std::logic_error(
                 "Triangle depths need the super-triangle: calculate them before erasing it");
