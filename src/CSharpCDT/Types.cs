@@ -56,9 +56,13 @@ public readonly record struct V2d(double X, double Y);
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct Edge
 {
+	/// <summary>The lower vertex index.</summary>
 	public uint V1 { get; }
+
+	/// <summary>The higher vertex index.</summary>
 	public uint V2 { get; }
 
+	/// <summary>The edge between two vertices, in either order.</summary>
 	public Edge(uint v1, uint v2) => (V1, V2) = v1 < v2 ? (v1, v2) : (v2, v1);
 }
 
@@ -67,6 +71,7 @@ public readonly record struct Edge
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct Triangle(uint V0, uint V1, uint V2, uint N0, uint N1, uint N2)
 {
+	/// <summary>Stands for no triangle across an edge.</summary>
 	public const uint NoNeighbor = uint.MaxValue;
 }
 

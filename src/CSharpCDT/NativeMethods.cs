@@ -12,8 +12,9 @@ static unsafe partial class NativeMethods
 {
 	const string Library = "cdt_c";
 
-	// A host such as Rhino looks for native libraries in its own folders, not beside this
-	// assembly, so cdt_c is found here first. A static constructor runs before any call.
+	// cdt_c is looked for beside this assembly first, where a host such as Rhino needs it, as it
+	// searches only its own folders, then under runtimes/<platform>/native, where a NuGet package
+	// puts it, and last where .NET would look anyway. A static constructor runs before any call.
 	static NativeMethods() =>
 		NativeLibrary.SetDllImportResolver(typeof(NativeMethods).Assembly, Resolve);
 
@@ -21,12 +22,30 @@ static unsafe partial class NativeMethods
 	{
 		if (name != Library)
 			return IntPtr.Zero;
+		var directory = Path.GetDirectoryName(assembly.Location) ?? "";
+		foreach (var path in Candidates(directory))
+			if (NativeLibrary.TryLoad(path, out var handle))
+				return handle;
+		return IntPtr.Zero;
+	}
+
+	/// <summary>Where cdt_c may be, for the platform this runs on, in the order tried.</summary>
+	internal static string[] Candidates(string directory)
+	{
 		var file =
 			OperatingSystem.IsWindows() ? "cdt_c.dll"
 			: OperatingSystem.IsMacOS() ? "libcdt_c.dylib"
 			: "libcdt_c.so";
-		var path = Path.Combine(Path.GetDirectoryName(assembly.Location) ?? "", file);
-		return NativeLibrary.TryLoad(path, out var handle) ? handle : IntPtr.Zero;
+		var architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+		var platform =
+			OperatingSystem.IsWindows() ? $"win-{architecture}"
+			: OperatingSystem.IsMacOS() ? "osx"
+			: $"linux-{architecture}";
+		return
+		[
+			Path.Combine(directory, file),
+			Path.Combine(directory, "runtimes", platform, "native", file),
+		];
 	}
 
 	// Lifetime and errors

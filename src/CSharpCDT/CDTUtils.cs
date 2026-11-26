@@ -12,8 +12,10 @@ public static unsafe class CDTUtils
 	public static bool VerifyWinding(Triangulation triangulation) =>
 		NativeMethods.VerifyWinding(triangulation.Handle) != 0;
 
+	/// <summary>The triangle's area, whichever way its corners run.</summary>
 	public static double Area(V2d a, V2d b, V2d c) => NativeMethods.Area(&a, &b, &c);
 
+	/// <summary>The centre of the circle through the triangle's three corners.</summary>
 	public static V2d Circumcenter(V2d a, V2d b, V2d c)
 	{
 		V2d result;
@@ -25,5 +27,6 @@ public static unsafe class CDTUtils
 	public static double SmallestAngle(V2d a, V2d b, V2d c) =>
 		NativeMethods.SmallestAngle(&a, &b, &c);
 
+	/// <summary>Degrees in radians.</summary>
 	public static double DegToRad(double degrees) => NativeMethods.DegToRad(degrees);
 }

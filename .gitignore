@@ -4,3 +4,4 @@ obj/
 *.user
 .DS_Store
 src/cdt_c/build/
+artifacts/

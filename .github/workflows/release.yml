@@ -1,0 +1,138 @@
+# On a published release: builds and tests cdt_c on every platform, packs one CSharpCDT package
+# holding all of them, installs and runs that package on every platform, then publishes it to
+# nuget.org with trusted publishing, so no key is stored here. Run by hand, it does everything
+# but publish.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native (${{ matrix.rid }})
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-24.04, rid: linux-x64 }
+          - { os: ubuntu-24.04-arm, rid: linux-arm64 }
+          - { os: macos-15, rid: osx }
+          - { os: windows-2025, rid: win-x64 }
+          - { os: windows-11-arm, rid: win-arm64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      # Building stages this platform's cdt_c under artifacts/runtimes/<rid>/native.
+      - run: dotnet test CSharpCDT.sln -c Release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.rid }}
+          path: artifacts/runtimes
+          if-no-files-found: error
+
+  pack:
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: artifacts/runtimes
+          merge-multiple: true
+      - name: The release's tag is the package's version
+        if: github.event_name == 'release'
+        run: |
+          version=$(dotnet msbuild src/CSharpCDT -getProperty:Version)
+          test "$version" = "${{ github.event.release.tag_name }}" \
+            || { echo "Tag ${{ github.event.release.tag_name }} is not version $version"; exit 1; }
+      - run: dotnet pack src/CSharpCDT -c Release -o dist
+      - name: Every platform is in the package
+        run: |
+          contents=$(unzip -l dist/*.nupkg)
+          for file in osx/native/libcdt_c.dylib win-x64/native/cdt_c.dll win-arm64/native/cdt_c.dll \
+            linux-x64/native/libcdt_c.so linux-arm64/native/libcdt_c.so; do
+            echo "$contents" | grep -q "runtimes/$file" || { echo "Missing runtimes/$file"; exit 1; }
+          done
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: dist/*.nupkg
+
+  # Installs the packed package into a new app, as anyone would, and triangulates with it.
+  smoke:
+    name: Smoke (${{ matrix.os }})
+    needs: pack
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: feed
+      - run: |
+          dotnet new console -n smoke -o smoke -f net8.0
+          cd smoke
+          dotnet add package CSharpCDT --source "$GITHUB_WORKSPACE/feed"
+          cat > Program.cs <<'EOF'
+          using CDT;
+
+          using var cdt = new Triangulation(
+              intersectingConstraintEdges: IntersectingConstraintEdges.TryResolve
+          );
+          cdt.InsertVertices([new(0, 0), new(1, 0), new(1, 1), new(0, 1)]);
+          cdt.InsertEdges([new Edge(0, 2), new Edge(1, 3)]);
+          cdt.EraseSuperTriangle();
+          if (cdt.TriangleCount != 4 || cdt.Vertices[4] != new V2d(0.5, 0.5))
+              throw new Exception("Wrong triangulation");
+          Console.WriteLine($"{cdt.VertexCount} vertices, {cdt.TriangleCount} triangles");
+          EOF
+          dotnet run
+
+  publish:
+    needs: smoke
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    environment: nuget
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: dist
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ vars.NUGET_USER }}
+      - run: >-
+          dotnet nuget push dist/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json

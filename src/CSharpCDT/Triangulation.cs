@@ -14,6 +14,8 @@ public sealed unsafe class Triangulation : IDisposable
 {
 	readonly TriangulationHandle _handle;
 
+	/// <summary>An empty triangulation. minDistToConstraintEdge is how close a vertex must be to
+	/// a constraint edge to count as on it.</summary>
 	public Triangulation(
 		VertexInsertionOrder vertexInsertionOrder = VertexInsertionOrder.Auto,
 		IntersectingConstraintEdges intersectingConstraintEdges =
@@ -30,6 +32,8 @@ public sealed unsafe class Triangulation : IDisposable
 			throw new TriangulationException("CDT could not create a triangulation.");
 	}
 
+	/// <summary>Frees CDT's triangulation. Vertices and Triangles read before this are no longer
+	/// good.</summary>
 	public void Dispose() => _handle.Dispose();
 
 	// Building
@@ -67,6 +71,7 @@ public sealed unsafe class Triangulation : IDisposable
 	public void EraseOuterTrianglesAndHoles() =>
 		Check(NativeMethods.EraseOuterTrianglesAndHoles(Handle));
 
+	/// <summary>Whether an erase or FinalizeTriangulation has finished the triangulation.</summary>
 	public bool IsFinalized => NativeMethods.IsFinalized(Handle) != 0;
 
 	/// <summary>Removes triangles, without finalizing.</summary>
@@ -143,12 +148,15 @@ public sealed unsafe class Triangulation : IDisposable
 			)
 		);
 
+	/// <summary>The triangles that touch the super-triangle's vertices.</summary>
 	public HashSet<uint> CollectSuperTriangle() =>
 		[.. Buffer(Counted(NativeMethods.CollectSuperTriangle(Handle)))];
 
+	/// <summary>The triangles outside the constraint edges.</summary>
 	public HashSet<uint> CollectOuterTriangles() =>
 		[.. Buffer(Counted(NativeMethods.CollectOuterTriangles(Handle)))];
 
+	/// <summary>The triangles outside the constraint edges and in the holes they enclose.</summary>
 	public HashSet<uint> CollectOuterTrianglesAndHoles() =>
 		[.. Buffer(Counted(NativeMethods.CollectOuterTrianglesAndHoles(Handle)))];
 
@@ -176,8 +184,10 @@ public sealed unsafe class Triangulation : IDisposable
 		}
 	}
 
+	/// <summary>How many vertices there are.</summary>
 	public int VertexCount => Vertices.Length;
 
+	/// <summary>The triangles, counter-clockwise, each with its neighbours.</summary>
 	public ReadOnlySpan<Triangle> Triangles
 	{
 		get
@@ -188,6 +198,7 @@ public sealed unsafe class Triangulation : IDisposable
 		}
 	}
 
+	/// <summary>How many triangles there are.</summary>
 	public int TriangleCount => Triangles.Length;
 
 	/// <summary>The constraint edges in the triangulation, split where they were split.</summary>

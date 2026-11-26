@@ -6,6 +6,13 @@ triangulation library, as [PythonCDT](https://github.com/artem-ogre/PythonCDT) i
 CDT is used unchanged, as a git submodule. A small C interface, `src/cdt_c`, exposes its
 `Triangulation<double>`, and `CSharpCDT` calls it from .NET with the same members PythonCDT has.
 
+```sh
+dotnet add package CSharpCDT
+```
+
+The package holds cdt_c for macOS (Apple silicon and Intel), Windows and Linux (x64 and Arm),
+so there is nothing to build.
+
 ```csharp
 using CDT;
 
@@ -54,7 +61,7 @@ Vertices must not repeat, as CDT requires. CDT's errors, such as duplicate verti
 edges where they are not allowed, are thrown as `TriangulationException`. A Triangulation is not
 safe to use from several threads at once.
 
-## Building
+## Building from source
 
 Needs the .NET SDK, CMake and a C++17 compiler. Building the C# project builds `cdt_c` with CMake
 first and copies it beside the assembly: `libcdt_c.dylib` on macOS (Apple silicon and Intel in
@@ -68,6 +75,13 @@ dotnet test CSharpCDT.sln
 
 The assembly finds `cdt_c` beside itself, so it also loads inside hosts that search their own
 folders for native libraries, such as Rhino.
+
+## Releasing
+
+Publishing a GitHub release tagged with the version, such as `2.1.0`, runs
+`.github/workflows/release.yml`: it builds cdt_c on every platform, packs one package with all of
+them, installs and runs it on every platform, and publishes it to nuget.org with trusted
+publishing. Run by hand from the Actions tab, it does all of that but publish.
 
 ## Versions
 
