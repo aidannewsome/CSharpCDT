@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>CDT</RootNamespace>
+    <!-- LibraryImport's generated marshalling is unsafe code. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>C# bindings for Artem Ogre's CDT, constrained Delaunay triangulation, as PythonCDT is for Python.</Description>
+  </PropertyGroup>
+
+  <!-- The native library, src/cdt_c, built with CMake before the C# and copied beside it, and so beside
+       every project that references this one. -->
+  <PropertyGroup>
+    <NativeDir>$(MSBuildThisFileDirectory)..\cdt_c</NativeDir>
+    <NativeBuildDir>$(NativeDir)\build</NativeBuildDir>
+  </PropertyGroup>
+  <Target Name="BuildNative" BeforeTargets="BeforeBuild">
+    <Exec
+      Command="cmake -S &quot;$(NativeDir)&quot; -B &quot;$(NativeBuildDir)&quot; -DCMAKE_BUILD_TYPE=Release"
+      StandardOutputImportance="low"
+    />
+    <Exec
+      Command="cmake --build &quot;$(NativeBuildDir)&quot; --config Release"
+      StandardOutputImportance="low"
+    />
+    <ItemGroup>
+      <None
+        Include="$(NativeBuildDir)\bin\*cdt_c.*"
+        Exclude="$(NativeBuildDir)\bin\*.exp;$(NativeBuildDir)\bin\*.lib"
+        CopyToOutputDirectory="PreserveNewest"
+        Link="%(Filename)%(Extension)"
+      />
+    </ItemGroup>
+  </Target>
+</Project>

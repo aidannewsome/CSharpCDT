@@ -1,0 +1,50 @@
+root = true
+
+# CSharpier formats the C#, and reads its indentation from here.
+[*.cs]
+indent_style = tab
+
+# Names as .NET's own: PascalCase for types, members, constants and static readonly fields, I
+# before an interface, camelCase for locals and parameters, and _camelCase for other private
+# fields. dotnet format style
+# holds every file to them, in CI too.
+[*.cs]
+dotnet_naming_rule.interfaces.symbols = interfaces
+dotnet_naming_rule.interfaces.style = i_pascal
+dotnet_naming_rule.interfaces.severity = warning
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_style.i_pascal.required_prefix = I
+dotnet_naming_style.i_pascal.capitalization = pascal_case
+
+dotnet_naming_rule.static_readonly.symbols = static_readonly
+dotnet_naming_rule.static_readonly.style = pascal
+dotnet_naming_rule.static_readonly.severity = warning
+dotnet_naming_symbols.static_readonly.applicable_kinds = field
+dotnet_naming_symbols.static_readonly.required_modifiers = static, readonly
+
+dotnet_naming_rule.private_fields.symbols = private_fields
+dotnet_naming_rule.private_fields.style = underscore_camel
+dotnet_naming_rule.private_fields.severity = warning
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers =
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+dotnet_naming_rule.constants.symbols = constants
+dotnet_naming_rule.constants.style = pascal
+dotnet_naming_rule.constants.severity = warning
+dotnet_naming_symbols.constants.applicable_kinds = field, local
+dotnet_naming_symbols.constants.required_modifiers = const
+
+dotnet_naming_rule.locals.symbols = locals
+dotnet_naming_rule.locals.style = camel
+dotnet_naming_rule.locals.severity = warning
+dotnet_naming_symbols.locals.applicable_kinds = parameter, local
+dotnet_naming_style.camel.capitalization = camel_case
+
+dotnet_naming_rule.members.symbols = members
+dotnet_naming_rule.members.style = pascal
+dotnet_naming_rule.members.severity = warning
+dotnet_naming_symbols.members.applicable_kinds = namespace, class, struct, enum, delegate, method, property, event, type_parameter
+dotnet_naming_style.pascal.capitalization = pascal_case

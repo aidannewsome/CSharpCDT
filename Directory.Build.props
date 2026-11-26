@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <!-- A compiler warning fails the build. Formatting is CSharpier's. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- As PythonCDT does: CDT's version, here 2.1, with the last number raised for a change to
+         the bindings alone. -->
+    <Version>2.1.0</Version>
+  </PropertyGroup>
+</Project>
