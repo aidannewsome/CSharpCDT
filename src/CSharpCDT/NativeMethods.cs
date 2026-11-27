@@ -7,7 +7,9 @@ namespace CDT;
 
 /// <summary>The functions src/cdt_c exports, as .NET calls them. One class holds every native
 /// call, as .NET's design guidelines ask. Each is declared once here and LibraryImport's source
-/// generator writes its body when the project builds.</summary>
+/// generator writes its body when the project builds. Spans and in and out parameters are passed
+/// straight through, pinned, without copying: only <see cref="Vertices"/> and
+/// <see cref="Triangles"/> return pointers, as they point into CDT's own memory.</summary>
 static unsafe partial class NativeMethods
 {
 	const string Library = "cdt_c";
@@ -64,18 +66,30 @@ static unsafe partial class NativeMethods
 	internal static partial IntPtr LastError(TriangulationHandle handle);
 
 	[LibraryImport(Library, EntryPoint = "cdt_copy_buffer")]
-	internal static partial void CopyBuffer(TriangulationHandle handle, uint* values);
+	internal static partial void CopyBuffer(TriangulationHandle handle, Span<uint> values);
 
 	// Building
 
 	[LibraryImport(Library, EntryPoint = "cdt_insert_vertices")]
-	internal static partial int InsertVertices(TriangulationHandle handle, V2d* xy, int count);
+	internal static partial int InsertVertices(
+		TriangulationHandle handle,
+		ReadOnlySpan<V2d> vertices,
+		int count
+	);
 
 	[LibraryImport(Library, EntryPoint = "cdt_insert_edges")]
-	internal static partial int InsertEdges(TriangulationHandle handle, Edge* edges, int count);
+	internal static partial int InsertEdges(
+		TriangulationHandle handle,
+		ReadOnlySpan<Edge> edges,
+		int count
+	);
 
 	[LibraryImport(Library, EntryPoint = "cdt_conform_to_edges")]
-	internal static partial int ConformToEdges(TriangulationHandle handle, Edge* edges, int count);
+	internal static partial int ConformToEdges(
+		TriangulationHandle handle,
+		ReadOnlySpan<Edge> edges,
+		int count
+	);
 
 	[LibraryImport(Library, EntryPoint = "cdt_erase_super_triangle")]
 	internal static partial int EraseSuperTriangle(TriangulationHandle handle);
@@ -92,14 +106,14 @@ static unsafe partial class NativeMethods
 	[LibraryImport(Library, EntryPoint = "cdt_remove_triangles")]
 	internal static partial int RemoveTriangles(
 		TriangulationHandle handle,
-		uint* triangles,
+		ReadOnlySpan<uint> triangles,
 		int count
 	);
 
 	[LibraryImport(Library, EntryPoint = "cdt_finalize_triangulation")]
 	internal static partial int FinalizeTriangulation(
 		TriangulationHandle handle,
-		uint* removedTriangles,
+		ReadOnlySpan<uint> removedTriangles,
 		int count
 	);
 
@@ -111,12 +125,12 @@ static unsafe partial class NativeMethods
 		uint maxVerticesToInsert,
 		int refinementCriterion,
 		double refinementThreshold,
-		uint* toErase,
+		ReadOnlySpan<uint> toErase,
 		int count,
 		double minEdgeLength,
 		int refinementOrder,
-		ulong* unrefined,
-		int* toEraseCount
+		out Unrefined unrefined,
+		out int toEraseCount
 	);
 
 	[LibraryImport(Library, EntryPoint = "cdt_find_encroached_fixed_edges")]
@@ -139,15 +153,18 @@ static unsafe partial class NativeMethods
 	internal static partial int CollectOuterTrianglesAndHoles(TriangulationHandle handle);
 
 	[LibraryImport(Library, EntryPoint = "cdt_calculate_triangle_depths")]
-	internal static partial int CalculateTriangleDepths(TriangulationHandle handle, ushort* depths);
+	internal static partial int CalculateTriangleDepths(
+		TriangulationHandle handle,
+		Span<ushort> depths
+	);
 
 	// Reading
 
 	[LibraryImport(Library, EntryPoint = "cdt_vertices")]
-	internal static partial V2d* Vertices(TriangulationHandle handle, int* count);
+	internal static partial V2d* Vertices(TriangulationHandle handle, out int count);
 
 	[LibraryImport(Library, EntryPoint = "cdt_triangles")]
-	internal static partial Triangle* Triangles(TriangulationHandle handle, int* count);
+	internal static partial Triangle* Triangles(TriangulationHandle handle, out int count);
 
 	[LibraryImport(Library, EntryPoint = "cdt_fixed_edges")]
 	internal static partial int FixedEdges(TriangulationHandle handle);
@@ -158,6 +175,12 @@ static unsafe partial class NativeMethods
 	[LibraryImport(Library, EntryPoint = "cdt_piece_to_originals")]
 	internal static partial int PieceToOriginals(TriangulationHandle handle);
 
+	[LibraryImport(Library, EntryPoint = "cdt_edge_to_pieces")]
+	internal static partial int EdgeToPieces(TriangulationHandle handle);
+
+	[LibraryImport(Library, EntryPoint = "cdt_edge_to_split_vertices")]
+	internal static partial int EdgeToSplitVertices(TriangulationHandle handle);
+
 	// Checks and geometry
 
 	[LibraryImport(Library, EntryPoint = "cdt_verify_topology")]
@@ -167,16 +190,65 @@ static unsafe partial class NativeMethods
 	internal static partial int VerifyWinding(TriangulationHandle handle);
 
 	[LibraryImport(Library, EntryPoint = "cdt_area")]
-	internal static partial double Area(V2d* a, V2d* b, V2d* c);
+	internal static partial double Area(in V2d a, in V2d b, in V2d c);
 
 	[LibraryImport(Library, EntryPoint = "cdt_circumcenter")]
-	internal static partial void Circumcenter(V2d* a, V2d* b, V2d* c, V2d* result);
+	internal static partial void Circumcenter(in V2d a, in V2d b, in V2d c, out V2d result);
 
 	[LibraryImport(Library, EntryPoint = "cdt_smallest_angle")]
-	internal static partial double SmallestAngle(V2d* a, V2d* b, V2d* c);
+	internal static partial double SmallestAngle(in V2d a, in V2d b, in V2d c);
 
-	[LibraryImport(Library, EntryPoint = "cdt_deg_to_rad")]
-	internal static partial double DegToRad(double degrees);
+	// Free functions
+
+	[LibraryImport(Library, EntryPoint = "cdt_find_duplicates")]
+	internal static partial int FindDuplicates(
+		ReadOnlySpan<V2d> vertices,
+		int count,
+		Span<uint> mapping,
+		Span<uint> duplicates,
+		out int duplicateCount,
+		Span<byte> error,
+		int errorLength
+	);
+
+	[LibraryImport(Library, EntryPoint = "cdt_remove_duplicates_and_remap_edges")]
+	internal static partial int RemoveDuplicatesAndRemapEdges(
+		Span<V2d> vertices,
+		int count,
+		Span<Edge> edges,
+		int edgeCount,
+		Span<uint> mapping,
+		Span<uint> duplicates,
+		out int duplicateCount,
+		Span<byte> error,
+		int errorLength
+	);
+
+	[LibraryImport(Library, EntryPoint = "cdt_remap_edges")]
+	internal static partial int RemapEdges(
+		Span<Edge> edges,
+		int edgeCount,
+		ReadOnlySpan<uint> mapping,
+		int mappingCount,
+		Span<byte> error,
+		int errorLength
+	);
+
+	[LibraryImport(Library, EntryPoint = "cdt_extract_edges_from_triangles")]
+	internal static partial int ExtractEdgesFromTriangles(
+		ReadOnlySpan<Triangle> triangles,
+		int count,
+		Span<Edge> edges
+	);
+
+	[LibraryImport(Library, EntryPoint = "cdt_calculate_triangles_by_vertex")]
+	internal static partial void CalculateTrianglesByVertex(
+		ReadOnlySpan<Triangle> triangles,
+		int count,
+		int vertexCount,
+		Span<int> offsets,
+		Span<uint> triangleIndices
+	);
 }
 
 /// <summary>A CDT triangulation on the native side, destroyed when released.</summary>

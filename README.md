@@ -31,7 +31,8 @@ var pieces = cdt.PieceToOriginals; // which original edge each split piece came 
 
 ## Members
 
-Everything PythonCDT binds, named as C# names things.
+Everything PythonCDT binds and the helpers in `CDT.h`, named and shaped as .NET expects:
+spans in, arrays out, and no copies where CDT's own memory can be read.
 
 | PythonCDT | C# |
 | --- | --- |
@@ -47,11 +48,14 @@ Everything PythonCDT binds, named as C# names things.
 | `remove_triangles`, `finalize_triangulation` | `RemoveTriangles`, `FinalizeTriangulation` |
 | `refine_triangles` | `RefineTriangles`, returning `Unrefined` |
 | `find_encroached_fixed_edges`, `find_unrefined_triangles` | `FindEncroachedFixedEdges`, `FindUnrefinedTriangles` |
-| `collect_super_triangle`, `collect_outer_triangles`, `collect_outer_triangles_and_holes` | `CollectSuperTriangle`, `CollectOuterTriangles`, `CollectOuterTrianglesAndHoles` |
+| `collect_super_triangle`, `collect_outer_triangles`, `collect_outer_triangles_and_holes` | `CollectSuperTriangle`, `CollectOuterTriangles`, `CollectOuterTrianglesAndHoles`, as arrays |
 | `verify_topology`, `verify_winding` | `CDTUtils.VerifyTopology`, `CDTUtils.VerifyWinding` |
-| `area`, `circumcenter`, `smallest_angle`, `deg_to_rad` | `CDTUtils.Area`, `CDTUtils.Circumcenter`, `CDTUtils.SmallestAngle`, `CDTUtils.DegToRad` |
+| `area`, `circumcenter`, `smallest_angle` | `CDTUtils.Area`, `CDTUtils.Circumcenter`, `CDTUtils.SmallestAngle` (for `deg_to_rad`, .NET has `double.DegreesToRadians`) |
+| C++ `FindDuplicates`, `RemoveDuplicates`, `RemoveDuplicatesAndRemapEdges`, `RemapEdges` | `CDTUtils.FindDuplicates`, `CDTUtils.RemoveDuplicates`, `CDTUtils.RemoveDuplicatesAndRemapEdges`, `CDTUtils.RemapEdges` |
+| C++ `extractEdgesFromTriangles`, `calculateTrianglesByVertex` | `CDTUtils.ExtractEdgesFromTriangles`, `CDTUtils.CalculateTrianglesByVertex` |
+| C++ `EdgeToPiecesMapping`, `EdgeToSplitVertices` | `EdgeToPieces`, `EdgeToSplitVertices` on the triangulation |
 | `VertexInsertionOrder`, `IntersectingConstraintEdges`, `RefinementCriterion`, `RefinementOrder` | the same enums |
-| `V2d`, `Edge`, `Triangle`, `Unrefined` | the same types |
+| `V2d`, `Edge`, `Triangle`, `Unrefined`, `DuplicatesInfo` | the same types |
 
 `Vertices` and `Triangles` are spans over CDT's memory, as PythonCDT's views are: no copy, and
 good until the triangulation next changes or is disposed. `V2d`, `Edge` and `Triangle` are laid

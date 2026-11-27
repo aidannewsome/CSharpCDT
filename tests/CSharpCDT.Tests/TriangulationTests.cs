@@ -123,7 +123,7 @@ public class TriangulationTests
 		using var cdt = new Triangulation();
 		cdt.InsertVertices([new(0, 0), new(10, 0), new(10, 1), new(0, 1)]);
 		cdt.InsertEdges(SquareEdges);
-		var threshold = CDTUtils.DegToRad(20);
+		var threshold = double.DegreesToRadians(20);
 		Assert.That(
 			cdt.FindUnrefinedTriangles(RefinementCriterion.SmallestAngle, threshold),
 			Is.Not.Empty
@@ -186,7 +186,6 @@ public class TriangulationTests
 		Assert.That(CDTUtils.Area(a, b, c), Is.EqualTo(2).Within(1e-12));
 		Assert.That(CDTUtils.Circumcenter(a, b, c), Is.EqualTo(new V2d(1, 1)));
 		Assert.That(CDTUtils.SmallestAngle(a, b, c), Is.EqualTo(Math.PI / 4).Within(1e-12));
-		Assert.That(CDTUtils.DegToRad(180), Is.EqualTo(Math.PI).Within(1e-12));
 	}
 
 	[Test]
@@ -197,5 +196,33 @@ public class TriangulationTests
 		cdt.EraseSuperTriangle();
 		Assert.That(cdt.Vertices[2], Is.EqualTo(new V2d(1, 1)));
 		Assert.That(cdt.Triangles[0].V0, Is.LessThan(4));
+	}
+
+	[Test]
+	public void RefiningAddsReplacementsToTheSetGiven()
+	{
+		using var cdt = new Triangulation();
+		cdt.InsertVertices([new(0, 0), new(10, 0), new(10, 1), new(0, 1), new(20, 0.5)]);
+		cdt.InsertEdges(SquareEdges);
+		var outer = new System.Collections.Generic.SortedSet<uint>(cdt.CollectOuterTriangles());
+		cdt.RefineTriangles(1000, toErase: outer);
+		Assert.That(outer, Is.Not.Empty);
+		cdt.FinalizeTriangulation([.. outer, .. cdt.CollectSuperTriangle()]);
+		Assert.That(CDTUtils.VerifyTopology(cdt));
+	}
+
+	[Test]
+	public void SplitVerticesRunAlongEachSplitEdge()
+	{
+		using var cdt = new Triangulation(
+			intersectingConstraintEdges: IntersectingConstraintEdges.TryResolve
+		);
+		cdt.InsertVertices(Square);
+		cdt.InsertEdges([new Edge(0, 2), new Edge(1, 3)]);
+		cdt.EraseSuperTriangle();
+		var split = cdt.EdgeToSplitVertices();
+		Assert.That(split[new Edge(0, 2)], Does.Contain(4u));
+		Assert.That(split[new Edge(1, 3)], Does.Contain(4u));
+		Assert.That(cdt.EdgeToPieces()[new Edge(0, 2)], Has.Length.EqualTo(2));
 	}
 }

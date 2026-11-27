@@ -10,6 +10,7 @@
 #include <extras/VerifyTopology.h>
 
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <string>
 #include <vector>
@@ -206,10 +207,16 @@ CDT_C_API int32_t cdt_finalize_triangulation(
 
 // Refining
 
+// CDT's Unrefined, with fixed-size counts, laid out as CSharpCDT's Unrefined.
+struct cdt_unrefined
+{
+    uint64_t shortEdgeTriangles, circumcenterOutside, circumcenterOnVertex, sharpFixedCorner,
+        shortEdges, splitVertexInvalid;
+};
+
 // Refines until no triangle is bad by the criterion or maxVerticesToInsert are added. toErase,
 // when count is not negative, holds triangles left as they are; the triangles that replace them
-// are kept in the buffer, with the call returning their count in toEraseCount. unrefined gets
-// Unrefined's six counts in order.
+// are kept in the buffer, with their count in toEraseCount.
 CDT_C_API int32_t cdt_refine_triangles(
     void* handle,
     uint32_t maxVerticesToInsert,
@@ -219,7 +226,7 @@ CDT_C_API int32_t cdt_refine_triangles(
     int32_t count,
     double minEdgeLength,
     int32_t refinementOrder,
-    uint64_t* unrefined,
+    cdt_unrefined* unrefined,
     int32_t* toEraseCount)
 {
     return guard(handle, [&] {
@@ -233,12 +240,13 @@ CDT_C_API int32_t cdt_refine_triangles(
             count >= 0 ? &set : nullptr,
             minEdgeLength,
             static_cast<CDT::RefinementOrder::Enum>(refinementOrder));
-        unrefined[0] = u.shortEdgeTriangles;
-        unrefined[1] = u.circumcenterOutside;
-        unrefined[2] = u.circumcenterOnVertex;
-        unrefined[3] = u.sharpFixedCorner;
-        unrefined[4] = u.shortEdges;
-        unrefined[5] = u.splitVertexInvalid;
+        *unrefined = cdt_unrefined{
+            u.shortEdgeTriangles,
+            u.circumcenterOutside,
+            u.circumcenterOnVertex,
+            u.sharpFixedCorner,
+            u.shortEdges,
+            u.splitVertexInvalid};
         *toEraseCount = count >= 0 ? keepIndices(handle, set) : 0;
     });
 }
@@ -394,7 +402,207 @@ CDT_C_API double cdt_smallest_angle(const double* a, const double* b, const doub
     return CDT::smallestAngle(v2d(a), v2d(b), v2d(c));
 }
 
-CDT_C_API double cdt_deg_to_rad(double degrees)
+// Mappings between the triangulation's edges and the constraint edges given, kept in the buffer
+// as, for each original edge, its v1, v2 and count, then that many values. Pieces are vertex
+// pairs, two values each, and split vertices one each, from the edge's v1 to its v2.
+
+CDT_C_API int32_t cdt_edge_to_pieces(void* handle)
 {
-    return CDT::degToRad(degrees);
+    std::vector<uint32_t>& buffer = H(handle)->buffer;
+    buffer.clear();
+    for(const auto& entry : CDT::EdgeToPiecesMapping(H(handle)->cdt.pieceToOriginals))
+    {
+        buffer.push_back(entry.first.v1());
+        buffer.push_back(entry.first.v2());
+        buffer.push_back(static_cast<uint32_t>(entry.second.size()));
+        for(const CDT::Edge& piece : entry.second)
+        {
+            buffer.push_back(piece.v1());
+            buffer.push_back(piece.v2());
+        }
+    }
+    return static_cast<int32_t>(buffer.size());
+}
+
+CDT_C_API int32_t cdt_edge_to_split_vertices(void* handle)
+{
+    const Triangulation& cdt = H(handle)->cdt;
+    std::vector<uint32_t>& buffer = H(handle)->buffer;
+    buffer.clear();
+    for(const auto& entry : CDT::EdgeToSplitVertices(
+            CDT::EdgeToPiecesMapping(cdt.pieceToOriginals), cdt.vertices))
+    {
+        buffer.push_back(entry.first.v1());
+        buffer.push_back(entry.first.v2());
+        buffer.push_back(static_cast<uint32_t>(entry.second.size()));
+        buffer.insert(buffer.end(), entry.second.begin(), entry.second.end());
+    }
+    return static_cast<int32_t>(buffer.size());
+}
+
+// Free functions, on the caller's own arrays. Each returns 0, or 1 with the reason in error.
+
+namespace
+{
+template <typename F>
+int32_t guardFree(char* error, int32_t errorLength, F f)
+{
+    try
+    {
+        f();
+        return 0;
+    }
+    catch(const std::exception& e)
+    {
+        if(error && errorLength > 0)
+        {
+            std::strncpy(error, e.what(), static_cast<size_t>(errorLength - 1));
+            error[errorLength - 1] = '\0';
+        }
+    }
+    return 1;
+}
+
+std::vector<CDT::V2d<double> > toVertices(const double* xy, int32_t count)
+{
+    std::vector<CDT::V2d<double> > vertices;
+    vertices.reserve(count);
+    for(int32_t i = 0; i < count; ++i)
+        vertices.push_back(CDT::V2d<double>(xy[2 * i], xy[2 * i + 1]));
+    return vertices;
+}
+
+void writeInfo(const CDT::DuplicatesInfo& info, uint32_t* mapping, uint32_t* duplicates, int32_t* duplicateCount)
+{
+    std::copy(info.mapping.begin(), info.mapping.end(), mapping);
+    std::copy(info.duplicates.begin(), info.duplicates.end(), duplicates);
+    *duplicateCount = static_cast<int32_t>(info.duplicates.size());
+}
+} // namespace
+
+// Finds vertices that repeat an earlier one. mapping gets each vertex's index among those kept,
+// and duplicates the indices of those that repeat, both with room for count.
+CDT_C_API int32_t cdt_find_duplicates(
+    const double* xy,
+    int32_t count,
+    uint32_t* mapping,
+    uint32_t* duplicates,
+    int32_t* duplicateCount,
+    char* error,
+    int32_t errorLength)
+{
+    return guardFree(error, errorLength, [&] {
+        const auto vertices = toVertices(xy, count);
+        writeInfo(
+            CDT::FindDuplicates<double>(
+                vertices.begin(),
+                vertices.end(),
+                [](const CDT::V2d<double>& v) { return v.x; },
+                [](const CDT::V2d<double>& v) { return v.y; }),
+            mapping,
+            duplicates,
+            duplicateCount);
+    });
+}
+
+// Removes duplicate vertices from xy in place and points the edges, in place, at the vertices
+// kept, as RemoveDuplicatesAndRemapEdges does. edgeCount may be 0 to remove duplicates alone.
+CDT_C_API int32_t cdt_remove_duplicates_and_remap_edges(
+    double* xy,
+    int32_t count,
+    uint32_t* vertexPairs,
+    int32_t edgeCount,
+    uint32_t* mapping,
+    uint32_t* duplicates,
+    int32_t* duplicateCount,
+    char* error,
+    int32_t errorLength)
+{
+    return guardFree(error, errorLength, [&] {
+        auto vertices = toVertices(xy, count);
+        auto edges = toEdges(vertexPairs, edgeCount);
+        writeInfo(
+            CDT::RemoveDuplicatesAndRemapEdges(vertices, edges),
+            mapping,
+            duplicates,
+            duplicateCount);
+        for(size_t i = 0; i < vertices.size(); ++i)
+        {
+            xy[2 * i] = vertices[i].x;
+            xy[2 * i + 1] = vertices[i].y;
+        }
+        for(size_t i = 0; i < edges.size(); ++i)
+        {
+            vertexPairs[2 * i] = edges[i].v1();
+            vertexPairs[2 * i + 1] = edges[i].v2();
+        }
+    });
+}
+
+// Points edges, in place, at new vertex indices by mapping, as RemapEdges does.
+CDT_C_API int32_t cdt_remap_edges(
+    uint32_t* vertexPairs,
+    int32_t edgeCount,
+    const uint32_t* mapping,
+    int32_t mappingCount,
+    char* error,
+    int32_t errorLength)
+{
+    return guardFree(error, errorLength, [&] {
+        auto edges = toEdges(vertexPairs, edgeCount);
+        CDT::RemapEdges(edges, std::vector<std::size_t>(mapping, mapping + mappingCount));
+        for(size_t i = 0; i < edges.size(); ++i)
+        {
+            vertexPairs[2 * i] = edges[i].v1();
+            vertexPairs[2 * i + 1] = edges[i].v2();
+        }
+    });
+}
+
+namespace
+{
+CDT::TriangleVec toTriangles(const uint32_t* triangles, int32_t count)
+{
+    const CDT::Triangle* first = reinterpret_cast<const CDT::Triangle*>(triangles);
+    return CDT::TriangleVec(first, first + count);
+}
+} // namespace
+
+// Writes every edge of the triangles once, as vertex pairs, into room for 3 * count edges, and
+// returns how many there are.
+CDT_C_API int32_t cdt_extract_edges_from_triangles(
+    const uint32_t* triangles,
+    int32_t count,
+    uint32_t* vertexPairs)
+{
+    int32_t n = 0;
+    for(const CDT::Edge& e : CDT::extractEdgesFromTriangles(toTriangles(triangles, count)))
+    {
+        vertexPairs[2 * n] = e.v1();
+        vertexPairs[2 * n + 1] = e.v2();
+        ++n;
+    }
+    return n;
+}
+
+// Writes the triangles touching each vertex: offsets has room for vertexCount + 1, and vertex i's
+// triangles are triangleIndices[offsets[i]] up to triangleIndices[offsets[i + 1]], with room for
+// 3 * count.
+CDT_C_API void cdt_calculate_triangles_by_vertex(
+    const uint32_t* triangles,
+    int32_t count,
+    int32_t vertexCount,
+    int32_t* offsets,
+    uint32_t* triangleIndices)
+{
+    const CDT::VerticesTriangles byVertex =
+        CDT::calculateTrianglesByVertex(toTriangles(triangles, count), vertexCount);
+    int32_t n = 0;
+    for(int32_t i = 0; i < vertexCount; ++i)
+    {
+        offsets[i] = n;
+        for(const CDT::TriInd t : byVertex[i])
+            triangleIndices[n++] = t;
+    }
+    offsets[vertexCount] = n;
 }
