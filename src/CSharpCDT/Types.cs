@@ -76,7 +76,8 @@ public readonly record struct Triangle(uint V0, uint V1, uint V2, uint N0, uint 
 }
 
 /// <summary>Counts of what <see cref="Triangulation.RefineTriangles"/> could not refine, as
-/// CDT's Unrefined.</summary>
+/// CDT's Unrefined, and laid out as cdt_c passes it.</summary>
+[StructLayout(LayoutKind.Sequential)]
 public readonly record struct Unrefined(
 	ulong ShortEdgeTriangles,
 	ulong CircumcenterOutside,
@@ -85,6 +86,10 @@ public readonly record struct Unrefined(
 	ulong ShortEdges,
 	ulong SplitVertexInvalid
 );
+
+/// <summary>Which vertices repeat an earlier one: each vertex's index among those kept, and the
+/// indices of those that repeat, as CDT's DuplicatesInfo.</summary>
+public sealed record DuplicatesInfo(uint[] Mapping, uint[] Duplicates);
 
 /// <summary>An error CDT reported, such as duplicate vertices or crossing edges where they are
 /// not allowed.</summary>

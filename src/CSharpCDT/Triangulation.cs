@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 namespace CDT;
 
 /// <summary>A constrained Delaunay triangulation: CDT's Triangulation&lt;double&gt;, with the
-/// members PythonCDT gives it. Insert vertices, then edges, then erase what is not wanted,
+/// members PythonCDT gives it, in .NET's way. Insert vertices, then edges, then erase what is not wanted,
 /// and read the result.</summary>
 /// <remarks><see cref="Vertices"/> and <see cref="Triangles"/> read CDT's own memory, as
 /// PythonCDT's do: they are good until the triangulation next changes or is disposed. Call
 /// ToArray on them to keep a copy.</remarks>
-public sealed unsafe class Triangulation : IDisposable
+public sealed class Triangulation : IDisposable
 {
 	readonly TriangulationHandle _handle;
 
@@ -39,26 +39,17 @@ public sealed unsafe class Triangulation : IDisposable
 	// Building
 
 	/// <summary>Inserts vertices. They must not repeat one another or any already inserted.</summary>
-	public void InsertVertices(ReadOnlySpan<V2d> vertices)
-	{
-		fixed (V2d* p = vertices)
-			Check(NativeMethods.InsertVertices(Handle, p, vertices.Length));
-	}
+	public void InsertVertices(ReadOnlySpan<V2d> vertices) =>
+		Check(NativeMethods.InsertVertices(Handle, vertices, vertices.Length));
 
 	/// <summary>Inserts constraint edges, which become edges of the triangulation.</summary>
-	public void InsertEdges(ReadOnlySpan<Edge> edges)
-	{
-		fixed (Edge* p = edges)
-			Check(NativeMethods.InsertEdges(Handle, p, edges.Length));
-	}
+	public void InsertEdges(ReadOnlySpan<Edge> edges) =>
+		Check(NativeMethods.InsertEdges(Handle, edges, edges.Length));
 
 	/// <summary>Inserts edges as a conforming triangulation does: split with new vertices until
 	/// every piece is Delaunay.</summary>
-	public void ConformToEdges(ReadOnlySpan<Edge> edges)
-	{
-		fixed (Edge* p = edges)
-			Check(NativeMethods.ConformToEdges(Handle, p, edges.Length));
-	}
+	public void ConformToEdges(ReadOnlySpan<Edge> edges) =>
+		Check(NativeMethods.ConformToEdges(Handle, edges, edges.Length));
 
 	/// <summary>Finishes with the convex hull of the vertices.</summary>
 	public void EraseSuperTriangle() => Check(NativeMethods.EraseSuperTriangle(Handle));
@@ -75,63 +66,57 @@ public sealed unsafe class Triangulation : IDisposable
 	public bool IsFinalized => NativeMethods.IsFinalized(Handle) != 0;
 
 	/// <summary>Removes triangles, without finalizing.</summary>
-	public void RemoveTriangles(ReadOnlySpan<uint> triangles)
-	{
-		fixed (uint* p = triangles)
-			Check(NativeMethods.RemoveTriangles(Handle, p, triangles.Length));
-	}
+	public void RemoveTriangles(ReadOnlySpan<uint> triangles) =>
+		Check(NativeMethods.RemoveTriangles(Handle, triangles, triangles.Length));
 
 	/// <summary>Removes the super-triangle's vertices and the given triangles, and finishes.</summary>
-	public void FinalizeTriangulation(ReadOnlySpan<uint> removedTriangles)
-	{
-		fixed (uint* p = removedTriangles)
-			Check(NativeMethods.FinalizeTriangulation(Handle, p, removedTriangles.Length));
-	}
+	public void FinalizeTriangulation(ReadOnlySpan<uint> removedTriangles) =>
+		Check(
+			NativeMethods.FinalizeTriangulation(Handle, removedTriangles, removedTriangles.Length)
+		);
 
 	// Refining
 
 	/// <summary>Adds vertices until no triangle is bad by the criterion, or until
 	/// maxVerticesToInsert are added. Triangles in toErase are left as they are, and the
-	/// triangles that replace them are added to it. Returns what could not be refined.</summary>
+	/// triangles that replace them are added to it, so the caller picks the kind of set. Returns
+	/// what could not be refined.</summary>
 	public Unrefined RefineTriangles(
 		uint maxVerticesToInsert,
 		RefinementCriterion refinementCriterion = RefinementCriterion.SmallestAngle,
 		double refinementThreshold = Math.PI / 9,
-		HashSet<uint> toErase = null,
+		ISet<uint> toErase = null,
 		double minEdgeLength = 1e-6,
 		RefinementOrder refinementOrder = RefinementOrder.Fifo
 	)
 	{
 		var erase = toErase is null ? [] : new uint[toErase.Count];
-		toErase?.CopyTo(erase);
-		var counts = stackalloc ulong[6];
-		int kept;
-		fixed (uint* p = erase)
-			Check(
-				NativeMethods.RefineTriangles(
-					Handle,
-					maxVerticesToInsert,
-					(int)refinementCriterion,
-					refinementThreshold,
-					p,
-					toErase is null ? -1 : erase.Length,
-					minEdgeLength,
-					(int)refinementOrder,
-					counts,
-					&kept
-				)
-			);
+		toErase?.CopyTo(erase, 0);
+		Check(
+			NativeMethods.RefineTriangles(
+				Handle,
+				maxVerticesToInsert,
+				(int)refinementCriterion,
+				refinementThreshold,
+				erase,
+				toErase is null ? -1 : erase.Length,
+				minEdgeLength,
+				(int)refinementOrder,
+				out var unrefined,
+				out int kept
+			)
+		);
 		if (toErase is not null)
 		{
 			toErase.Clear();
 			toErase.UnionWith(Buffer(kept));
 		}
-		return new Unrefined(counts[0], counts[1], counts[2], counts[3], counts[4], counts[5]);
+		return unrefined;
 	}
 
 	/// <summary>Fixed edges another vertex encroaches on, which refining would split.</summary>
 	public Edge[] FindEncroachedFixedEdges() =>
-		Edges(Buffer(Counted(NativeMethods.FindEncroachedFixedEdges(Handle))));
+		Edges(Counted(NativeMethods.FindEncroachedFixedEdges(Handle)));
 
 	/// <summary>Triangles still bad by the criterion.</summary>
 	public uint[] FindUnrefinedTriangles(
@@ -149,24 +134,23 @@ public sealed unsafe class Triangulation : IDisposable
 		);
 
 	/// <summary>The triangles that touch the super-triangle's vertices.</summary>
-	public HashSet<uint> CollectSuperTriangle() =>
-		[.. Buffer(Counted(NativeMethods.CollectSuperTriangle(Handle)))];
+	public uint[] CollectSuperTriangle() =>
+		Buffer(Counted(NativeMethods.CollectSuperTriangle(Handle)));
 
 	/// <summary>The triangles outside the constraint edges.</summary>
-	public HashSet<uint> CollectOuterTriangles() =>
-		[.. Buffer(Counted(NativeMethods.CollectOuterTriangles(Handle)))];
+	public uint[] CollectOuterTriangles() =>
+		Buffer(Counted(NativeMethods.CollectOuterTriangles(Handle)));
 
 	/// <summary>The triangles outside the constraint edges and in the holes they enclose.</summary>
-	public HashSet<uint> CollectOuterTrianglesAndHoles() =>
-		[.. Buffer(Counted(NativeMethods.CollectOuterTrianglesAndHoles(Handle)))];
+	public uint[] CollectOuterTrianglesAndHoles() =>
+		Buffer(Counted(NativeMethods.CollectOuterTrianglesAndHoles(Handle)));
 
 	/// <summary>Each triangle's depth: how many constraint boundaries lie between it and the
 	/// outside. Calculated from the super-triangle, so before any erase.</summary>
 	public ushort[] CalculateTriangleDepths()
 	{
 		var depths = new ushort[TriangleCount];
-		fixed (ushort* p = depths)
-			Check(NativeMethods.CalculateTriangleDepths(Handle, p));
+		Check(NativeMethods.CalculateTriangleDepths(Handle, depths));
 		return depths;
 	}
 
@@ -174,12 +158,11 @@ public sealed unsafe class Triangulation : IDisposable
 
 	/// <summary>The vertices: those inserted, in order, then any CDT added, such as where
 	/// constraint edges cross. Read after an erase, so the super-triangle's are gone.</summary>
-	public ReadOnlySpan<V2d> Vertices
+	public unsafe ReadOnlySpan<V2d> Vertices
 	{
 		get
 		{
-			int count;
-			var p = NativeMethods.Vertices(Handle, &count);
+			var p = NativeMethods.Vertices(Handle, out int count);
 			return new ReadOnlySpan<V2d>(p, count);
 		}
 	}
@@ -188,12 +171,11 @@ public sealed unsafe class Triangulation : IDisposable
 	public int VertexCount => Vertices.Length;
 
 	/// <summary>The triangles, counter-clockwise, each with its neighbours.</summary>
-	public ReadOnlySpan<Triangle> Triangles
+	public unsafe ReadOnlySpan<Triangle> Triangles
 	{
 		get
 		{
-			int count;
-			var p = NativeMethods.Triangles(Handle, &count);
+			var p = NativeMethods.Triangles(Handle, out int count);
 			return new ReadOnlySpan<Triangle>(p, count);
 		}
 	}
@@ -202,7 +184,7 @@ public sealed unsafe class Triangulation : IDisposable
 	public int TriangleCount => Triangles.Length;
 
 	/// <summary>The constraint edges in the triangulation, split where they were split.</summary>
-	public Edge[] FixedEdges => Edges(Buffer(NativeMethods.FixedEdges(Handle)));
+	public Edge[] FixedEdges => Edges(NativeMethods.FixedEdges(Handle));
 
 	/// <summary>Fixed edges that more than one constraint edge overlaps, and by how many more.</summary>
 	public Dictionary<Edge, ushort> OverlapCount
@@ -236,6 +218,41 @@ public sealed unsafe class Triangulation : IDisposable
 		}
 	}
 
+	/// <summary>Each constraint edge that was split or overlapped, and the pieces it became, as
+	/// CDT's EdgeToPiecesMapping gives them.</summary>
+	public Dictionary<Edge, Edge[]> EdgeToPieces()
+	{
+		var values = Buffer(NativeMethods.EdgeToPieces(Handle));
+		var map = new Dictionary<Edge, Edge[]>();
+		for (int i = 0; i < values.Length; )
+		{
+			var edge = new Edge(values[i], values[i + 1]);
+			var pieces = new Edge[values[i + 2]];
+			i += 3;
+			for (int j = 0; j < pieces.Length; j++, i += 2)
+				pieces[j] = new Edge(values[i], values[i + 1]);
+			map[edge] = pieces;
+		}
+		return map;
+	}
+
+	/// <summary>Each constraint edge that was split, and the vertices along it from its V1 to its
+	/// V2, as CDT's EdgeToSplitVertices gives them: what ties data on an edge given, such as
+	/// heights, to the triangulation.</summary>
+	public Dictionary<Edge, uint[]> EdgeToSplitVertices()
+	{
+		var values = Buffer(NativeMethods.EdgeToSplitVertices(Handle));
+		var map = new Dictionary<Edge, uint[]>();
+		for (int i = 0; i < values.Length; )
+		{
+			var edge = new Edge(values[i], values[i + 1]);
+			int count = (int)values[i + 2];
+			map[edge] = values.AsSpan(i + 3, count).ToArray();
+			i += 3 + count;
+		}
+		return map;
+	}
+
 	internal TriangulationHandle Handle =>
 		_handle.IsClosed ? throw new ObjectDisposedException(nameof(Triangulation)) : _handle;
 
@@ -257,16 +274,16 @@ public sealed unsafe class Triangulation : IDisposable
 	uint[] Buffer(int count)
 	{
 		var values = new uint[count];
-		fixed (uint* p = values)
-			NativeMethods.CopyBuffer(Handle, p);
+		NativeMethods.CopyBuffer(Handle, values);
 		return values;
 	}
 
-	static Edge[] Edges(uint[] pairs)
+	/// <summary>The buffer's vertex pairs, copied straight into edges: CDT keeps each edge's lower
+	/// index first, as Edge does.</summary>
+	Edge[] Edges(int count)
 	{
-		var edges = new Edge[pairs.Length / 2];
-		for (int i = 0; i < edges.Length; i++)
-			edges[i] = new Edge(pairs[2 * i], pairs[2 * i + 1]);
+		var edges = new Edge[count / 2];
+		NativeMethods.CopyBuffer(Handle, MemoryMarshal.Cast<Edge, uint>(edges.AsSpan()));
 		return edges;
 	}
 }
