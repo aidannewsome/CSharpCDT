@@ -23,6 +23,23 @@ public class TriangulationTests
 	}
 
 	[Test]
+	public void FlippingTheDiagonalSwapsIt()
+	{
+		using var cdt = new Triangulation();
+		cdt.InsertVertices(Square);
+		cdt.EraseSuperTriangle();
+		static Edge Shared(Triangle a, Triangle b)
+		{
+			var common = new[] { a.V0, a.V1, a.V2 }.Intersect([b.V0, b.V1, b.V2]).ToArray();
+			return new Edge(common[0], common[1]);
+		}
+		var before = Shared(cdt.Triangles[0], cdt.Triangles[1]);
+		cdt.FlipEdge(0, 1);
+		Assert.That(CDTUtils.VerifyTopology(cdt), Is.True);
+		Assert.That(Shared(cdt.Triangles[0], cdt.Triangles[1]), Is.Not.EqualTo(before));
+	}
+
+	[Test]
 	public void NeighborsPointAcrossSharedEdges()
 	{
 		using var cdt = new Triangulation();
