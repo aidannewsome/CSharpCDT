@@ -11,6 +11,8 @@
   <PropertyGroup>
     <PackageId>CSharpCDT</PackageId>
     <Authors>Aidan Newsome</Authors>
+    <Copyright>CDT © Artem Ogre</Copyright>
+    <PackageReleaseNotes>https://github.com/aidannewsome/CSharpCDT/releases/tag/$(Version)</PackageReleaseNotes>
     <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/aidannewsome/CSharpCDT</PackageProjectUrl>
     <RepositoryUrl>https://github.com/aidannewsome/CSharpCDT</RepositoryUrl>
