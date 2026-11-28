@@ -18,6 +18,7 @@
 #include <CDT.h>
 #include <extras/VerifyTopology.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <exception>
@@ -546,8 +547,10 @@ int32_t guardFree(char* error, int32_t errorLength, F f)
 
 void writeInfo(const CDT::DuplicatesInfo& info, uint32_t* mapping, uint32_t* duplicates, int32_t* duplicateCount)
 {
-    std::copy(info.mapping.begin(), info.mapping.end(), mapping);
-    std::copy(info.duplicates.begin(), info.duplicates.end(), duplicates);
+    // CDT gives size_t. The indices are below count, an int32, so they fit in 32 bits.
+    const auto narrow = [](std::size_t i) { return static_cast<uint32_t>(i); };
+    std::transform(info.mapping.begin(), info.mapping.end(), mapping, narrow);
+    std::transform(info.duplicates.begin(), info.duplicates.end(), duplicates, narrow);
     *duplicateCount = static_cast<int32_t>(info.duplicates.size());
 }
 } // namespace
