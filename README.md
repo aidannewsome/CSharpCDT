@@ -3,6 +3,8 @@
 C# bindings for [CDT](https://github.com/artem-ogre/CDT), Artem Ogre's constrained Delaunay
 triangulation library, as [PythonCDT](https://github.com/artem-ogre/PythonCDT) is for Python.
 
+Install from [NuGet](https://www.nuget.org/packages/CSharpCDT):
+
 ```sh
 dotnet add package CSharpCDT
 ```
