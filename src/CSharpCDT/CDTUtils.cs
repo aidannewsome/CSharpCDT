@@ -52,52 +52,53 @@ public static class CDTUtils
 		return new DuplicatesInfo(mapping, duplicates[..count]);
 	}
 
+	// RemoveDuplicates, RemapEdges and RemoveDuplicatesAndRemapEdges are done here, on the
+	// caller's own memory, as CDT.h does them: CDT takes std::vectors for them, so calling it
+	// would copy the arrays in and out.
+
 	/// <summary>Removes vertices that repeat an earlier one, in place, as CDT's RemoveDuplicates
 	/// does. Insert what is left: CDT does not accept duplicates.</summary>
-	public static DuplicatesInfo RemoveDuplicates(List<V2d> vertices) =>
-		RemoveDuplicatesAndRemapEdges(vertices, []);
+	public static DuplicatesInfo RemoveDuplicates(List<V2d> vertices)
+	{
+		var info = FindDuplicates(CollectionsMarshal.AsSpan(vertices));
+		RemoveDuplicates(vertices, info.Duplicates);
+		return info;
+	}
+
+	/// <summary>Removes the vertices at the indices given, in increasing order, in place,
+	/// keeping the rest in order, as CDT's RemoveDuplicates with duplicates given does.</summary>
+	public static void RemoveDuplicates(List<V2d> vertices, ReadOnlySpan<uint> duplicates)
+	{
+		var span = CollectionsMarshal.AsSpan(vertices);
+		int kept = 0,
+			next = 0;
+		for (int i = 0; i < span.Length; i++)
+		{
+			if (next < duplicates.Length && duplicates[next] == i)
+			{
+				next++;
+				continue;
+			}
+			span[kept++] = span[i];
+		}
+		vertices.RemoveRange(kept, vertices.Count - kept);
+	}
 
 	/// <summary>Removes vertices that repeat an earlier one and points the edges at the vertices
 	/// kept, both in place, as CDT's RemoveDuplicatesAndRemapEdges does. The mapping it returns
 	/// ties data on the vertices given to the vertices kept.</summary>
-	public static DuplicatesInfo RemoveDuplicatesAndRemapEdges(List<V2d> vertices, List<Edge> edges)
+	public static DuplicatesInfo RemoveDuplicatesAndRemapEdges(List<V2d> vertices, Span<Edge> edges)
 	{
-		var mapping = new uint[vertices.Count];
-		var duplicates = new uint[vertices.Count];
-		var error = new byte[ErrorLength];
-		Check(
-			NativeMethods.RemoveDuplicatesAndRemapEdges(
-				CollectionsMarshal.AsSpan(vertices),
-				vertices.Count,
-				CollectionsMarshal.AsSpan(edges),
-				edges.Count,
-				mapping,
-				duplicates,
-				out int count,
-				error,
-				error.Length
-			),
-			error
-		);
-		vertices.RemoveRange(vertices.Count - count, count);
-		return new DuplicatesInfo(mapping, duplicates[..count]);
+		var info = RemoveDuplicates(vertices);
+		RemapEdges(edges, info.Mapping);
+		return info;
 	}
 
 	/// <summary>Points edges, in place, at new vertex indices, as CDT's RemapEdges does.</summary>
 	public static void RemapEdges(Span<Edge> edges, ReadOnlySpan<uint> mapping)
 	{
-		var error = new byte[ErrorLength];
-		Check(
-			NativeMethods.RemapEdges(
-				edges,
-				edges.Length,
-				mapping,
-				mapping.Length,
-				error,
-				error.Length
-			),
-			error
-		);
+		for (int i = 0; i < edges.Length; i++)
+			edges[i] = new Edge(mapping[(int)edges[i].V1], mapping[(int)edges[i].V2]);
 	}
 
 	/// <summary>Every edge of the triangles once, as CDT's extractEdgesFromTriangles gives

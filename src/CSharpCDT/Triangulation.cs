@@ -75,6 +75,26 @@ public sealed class Triangulation : IDisposable
 			NativeMethods.FinalizeTriangulation(Handle, removedTriangles, removedTriangles.Length)
 		);
 
+	/// <summary>Flips the edge between two neighbouring triangles. For changing the triangulation
+	/// by hand: CDT does not check that it stays Delaunay.</summary>
+	public void FlipEdge(uint triangle, uint opposite) =>
+		Check(NativeMethods.FlipEdge(Handle, triangle, opposite));
+
+	/// <summary>Flips the edge between two neighbouring triangles, given their four vertices and
+	/// four outer neighbours as CDT's second flipEdge takes them, so CDT need not look them up.</summary>
+	public void FlipEdge(
+		uint triangle,
+		uint opposite,
+		uint v1,
+		uint v2,
+		uint v3,
+		uint v4,
+		uint n1,
+		uint n2,
+		uint n3,
+		uint n4
+	) => Check(NativeMethods.FlipEdge(Handle, triangle, opposite, v1, v2, v3, v4, n1, n2, n3, n4));
+
 	// Refining
 
 	/// <summary>Adds vertices until no triangle is bad by the criterion, or until

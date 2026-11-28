@@ -117,6 +117,24 @@ static unsafe partial class NativeMethods
 		int count
 	);
 
+	[LibraryImport(Library, EntryPoint = "cdt_flip_edge")]
+	internal static partial int FlipEdge(TriangulationHandle handle, uint triangle, uint opposite);
+
+	[LibraryImport(Library, EntryPoint = "cdt_flip_edge_given")]
+	internal static partial int FlipEdge(
+		TriangulationHandle handle,
+		uint triangle,
+		uint opposite,
+		uint v1,
+		uint v2,
+		uint v3,
+		uint v4,
+		uint n1,
+		uint n2,
+		uint n3,
+		uint n4
+	);
+
 	// Refining
 
 	[LibraryImport(Library, EntryPoint = "cdt_refine_triangles")]
@@ -207,29 +225,6 @@ static unsafe partial class NativeMethods
 		Span<uint> mapping,
 		Span<uint> duplicates,
 		out int duplicateCount,
-		Span<byte> error,
-		int errorLength
-	);
-
-	[LibraryImport(Library, EntryPoint = "cdt_remove_duplicates_and_remap_edges")]
-	internal static partial int RemoveDuplicatesAndRemapEdges(
-		Span<V2d> vertices,
-		int count,
-		Span<Edge> edges,
-		int edgeCount,
-		Span<uint> mapping,
-		Span<uint> duplicates,
-		out int duplicateCount,
-		Span<byte> error,
-		int errorLength
-	);
-
-	[LibraryImport(Library, EntryPoint = "cdt_remap_edges")]
-	internal static partial int RemapEdges(
-		Span<Edge> edges,
-		int edgeCount,
-		ReadOnlySpan<uint> mapping,
-		int mappingCount,
 		Span<byte> error,
 		int errorLength
 	);

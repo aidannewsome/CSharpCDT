@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Linq;
 using CDT;
 using NUnit.Framework;
@@ -21,7 +20,7 @@ public class HelperTests
 	public void DuplicatesAreRemovedAndEdgesRemapped()
 	{
 		var vertices = WithRepeat.ToList();
-		var edges = new List<Edge> { new(3, 4), new(1, 2) };
+		Edge[] edges = [new(3, 4), new(1, 2)];
 		var info = CDTUtils.RemoveDuplicatesAndRemapEdges(vertices, edges);
 		Assert.That(vertices, Has.Count.EqualTo(4));
 		Assert.That(vertices[3], Is.EqualTo(new V2d(0, 1)));
